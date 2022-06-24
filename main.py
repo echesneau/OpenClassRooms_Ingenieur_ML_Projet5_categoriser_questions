@@ -6,9 +6,20 @@
 import argparse
 import os
 import pickle
+import re
 import nltk
 import pandas as pd
 import numpy as np
+
+from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
+
+import tensorflow as tf
+tf.get_logger().setLevel('INFO')
+import tensorflow_hub as hub
+
+import logging
+logging.disable(logging.WARNING)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
 #=========================
 # functions
@@ -30,6 +41,27 @@ def clean_tag_keep(l, tags=[]) :
     returns : list : new list of tags
     """
     return [t for t in l if t in tags]
+
+def tokenizer(txt) :
+    tag_tokenizer = nltk.RegexpTokenizer(r'</?(?:b|p)>', gaps=True)
+    txt_tokenizer = nltk.RegexpTokenizer(r'\w+')
+
+    txt = ''.join([i for i in txt if not i.isdigit()])
+    txt = re.sub(r'_+', ' ', txt)
+    
+    tokens = txt_tokenizer.tokenize(' '.join(tag_tokenizer.tokenize(txt.lower())))
+    return ' '.join(tokens)
+
+def use_features(sentences, embedding, batch_size=16):
+    for step in range(len(sentences)//batch_size) :
+        idx = step*batch_size
+        feat = embedding(sentences[idx:idx+batch_size])
+        if step ==0 :
+            features = feat
+        else :
+            features = np.concatenate((features,feat))
+    return features
+    
 
 if __name__ == "__main__" :
     #=========================
@@ -91,5 +123,29 @@ if __name__ == "__main__" :
     if args.debug :
         print(DATA[['Tags_list', 'nTags']])
     DATA = DATA.drop(DATA[DATA['nTags']==0].index)
+    DATA['one_tag'] = DATA['Tags_list'].apply(lambda x : x[0])
     if args.verbose or args.debug :
         print(f"Number of rows after cleaning : {len(DATA)}")
+
+    #=========================
+    # tags encoding
+    #=========================
+    mlb = MultiLabelBinarizer()
+    y_all = mlb.fit_transform(DATA['Tags_list'])
+
+    enc = LabelEncoder()
+    y_one = enc.fit_transform(DATA['one_tag'])
+
+    #=========================
+    # USE features
+    #=========================
+    embedding = hub.load("https://tfhub.dev/google/universal-sentence-encoder/4")
+    DATA['Body_tokenized'] = DATA['Body'].apply(tokenizer)
+    if args.debug :
+        print(DATA['Body_tokenized'])
+    features = use_features(DATA['Body_tokenized'].to_list(), embedding, batch_size=5)
+    if args.verbose or args.debug :
+        print(f"Shape of USE features : {features.shape}")
+    if args.debug :
+        print(features)
+    #Make a pipeline : creation des features, fit, prediction, retour de la liste des tags en format str
