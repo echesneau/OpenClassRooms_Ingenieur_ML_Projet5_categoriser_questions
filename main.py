@@ -22,6 +22,7 @@ from sklearn.preprocessing import MultiLabelBinarizer, LabelEncoder
 import sklearn.pipeline
 import sklearn.svm
 from sklearn.metrics import accuracy_score, precision_score
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from sklearn.model_selection import train_test_split
 
 import tensorflow as tf
@@ -146,6 +147,8 @@ if __name__ == "__main__" :
                                      '\n Written by E. Chesneau')
     parser.add_argument('--ifile', '-i', \
                         help="Input Database export from Stackoverflow")
+    parser.add_argument('--model', '-m', help="model created", \
+                        choices=['use_svc', 'tfidf_svc' ])
     parser.add_argument('--verbose', '-v', \
                         help="Verbose Mode", \
                         action="store_true")
@@ -192,7 +195,7 @@ if __name__ == "__main__" :
     if args.debug :
         print('Tags keeped :')
         print(tags)
-    DATA['Tags_list'] = DATA['Tags_list'].apply(clean_tag_keep, tags=tags)
+    DATA['Tags_list'] = DATA['Tags_list'].apply(clean_tag_keep, keep_tags=tags)
     DATA['nTags'] = DATA['Tags_list'].apply(len)
     if args.debug :
         print(DATA[['Tags_list', 'nTags']])
@@ -210,10 +213,14 @@ if __name__ == "__main__" :
     enc = LabelEncoder()
     y_one = enc.fit_transform(DATA['one_tag'])
 
+    X_train, X_test, y_train, y_test = train_test_split(DATA['Body'], \
+                                                        y_one, \
+                                                        test_size=0.3,
+                                                        random_state=42)
     #=========================
     # USE features
     #=========================
-    if args.debug :
+    if args.debug and args.model == "use_svc" :
         features = UseTransformer(tokenizer=tokenizer, \
                                   embedding=hub.load("https://tfhub.dev/google/universal-sentence-encoder/4"), \
                                   batch_size=1).transform(DATA['Body'])
@@ -225,27 +232,37 @@ if __name__ == "__main__" :
     #=========================
     if args.verbose or args.debug :
         print("Model fitting...")
-    use_pipeline = sklearn.pipeline.Pipeline(steps=[\
-                                                    ('use_features_trans', \
-                                                     UseTransformer(tokenizer=tokenizer, \
-                                                                    embedding=hub.\
-                                                                    load("https://tfhub.dev/google/universal-sentence-encoder/4"), \
-                                                                    batch_size=1)
-                                                 ),\
+    if args.model == 'use_svc' :
+        pipeline = sklearn.pipeline.Pipeline(steps=[\
+                                                        ('features_trans', \
+                                                         UseTransformer(tokenizer=tokenizer, \
+                                                                        embedding=hub.\
+                                                                        load("https://tfhub.dev/google/universal-sentence-encoder/4"), \
+                                                                        batch_size=1)
+                                                     ),\
+                                                        ('SVM_classifier', sklearn.svm.SVC() )\
+                                                    ])
+    elif args.model == "tfidf_svc":
+        pipeline = sklearn.pipeline.Pipeline(steps=[\
+                                                    ('features_trans', \
+                                                     TfidfVectorizer(stop_words='english', \
+                                                                     max_df=0.95, min_df=2)),
                                                     ('SVM_classifier', sklearn.svm.SVC() )\
-                                                ])
+                                                    ])
 
     #=========================
     # Training
     #=========================
-    X_train, X_test, y_train, y_test = train_test_split(DATA['Body'].iloc[:200], \
-                                                        y_one[:200], \
-                                                        test_size=0.3,
-                                                        random_state=42)
-    use_pipeline.fit(X_train, y_train)
-
-    y_pred_train = use_pipeline.predict(X_train)
-    y_pred_test = use_pipeline.predict(X_test)
+    try : 
+        pipeline.fit(X_train, y_train)
+    except :
+        pipeline.fit(X_train.toarray(), y_train)
+    try : 
+        y_pred_train = pipeline.predict(X_train)
+        y_pred_test = pipeline.predict(X_test)
+    except :
+        y_pred_train = pipeline.predict(X_train.toarray())
+        y_pred_test = pipeline.predict(X_test.toarray())
     if args.debug :
         print(f"y_pred_train = {y_pred_train}")
         print(f"y_pred_test = {y_pred_test}")
@@ -257,4 +274,4 @@ if __name__ == "__main__" :
     #=========================
     #with open('pipeline_use-svc.pkl', 'wb') as ofile :
     #    pickle.dump(use_pipeline, ofile, pickle.HIGHEST_PROTOCOL)
-    #joblib.dump(use_pipeline, 'pipeline_use-svc.joblib')
+    joblib.dump(pipeline, f'pipeline_{args.model}.joblib')
