@@ -148,7 +148,8 @@ if __name__ == "__main__" :
     parser.add_argument('--ifile', '-i', \
                         help="Input Database export from Stackoverflow")
     parser.add_argument('--model', '-m', help="model created", \
-                        choices=['use_svc', 'tfidf_svc' ])
+                        choices=['use_svc', 'tfidf_svc' ],
+                        default='tfidf_svc')
     parser.add_argument('--verbose', '-v', \
                         help="Verbose Mode", \
                         action="store_true")
@@ -212,9 +213,9 @@ if __name__ == "__main__" :
 
     enc = LabelEncoder()
     y_one = enc.fit_transform(DATA['one_tag'])
-
-    X_train, X_test, y_train, y_test = train_test_split(DATA['Body'], \
-                                                        y_one, \
+    joblib.dump(enc, 'encoder_1tag.joblib')
+    X_train, X_test, y_train, y_test = train_test_split(DATA['Body'][:200], \
+                                                        y_one[:200], \
                                                         test_size=0.3,
                                                         random_state=42)
     #=========================
@@ -274,4 +275,4 @@ if __name__ == "__main__" :
     #=========================
     #with open('pipeline_use-svc.pkl', 'wb') as ofile :
     #    pickle.dump(use_pipeline, ofile, pickle.HIGHEST_PROTOCOL)
-    joblib.dump(pipeline, f'pipeline_{args.model}.joblib')
+    #joblib.dump(pipeline, f'pipeline_{args.model}.joblib')

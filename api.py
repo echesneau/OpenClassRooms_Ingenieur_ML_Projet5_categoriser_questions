@@ -20,7 +20,7 @@ class FeatureDataInstance(BaseModel):
 @app.on_event('startup')
 async def load_model():
     var['model'] = joblib.load('pipeline_tfidf_svc.joblib')
-
+    var['encod'] = joblib.load('encoder_1tag.joblib')
 
 @app.get("/")
 async def root():
@@ -30,7 +30,9 @@ async def root():
 def predict(data: FeatureDataInstance):
     """Generate predictions for data sent to the /predict/ route."""
     prediction = var['model'].predict([data.X]).tolist()
-    return {'tag number': prediction[0]}
+    tag = var['encod'].inverse_transform(prediction)
+    return {'tag number': prediction[0],
+            'tag' : tag[0] }
 
 if __name__ == '__main__':
     uvicorn.run(app, host='127.0.0.1', workers=1)
