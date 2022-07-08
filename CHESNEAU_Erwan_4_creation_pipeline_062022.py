@@ -275,4 +275,4 @@ if __name__ == "__main__" :
     #=========================
     #with open('pipeline_use-svc.pkl', 'wb') as ofile :
     #    pickle.dump(use_pipeline, ofile, pickle.HIGHEST_PROTOCOL)
-    #joblib.dump(pipeline, f'pipeline_{args.model}.joblib')
+    joblib.dump(pipeline, f'pipeline_{args.model}.joblib')
